@@ -47,6 +47,13 @@ trait Operation
     protected $data = [];
 
     /**
+     * Paths that will be added to the migration.
+     *
+     * @var array
+     */
+    protected $migrationPaths = [];
+
+    /**
      * Resolver list.
      *
      * @var array
@@ -142,12 +149,11 @@ trait Operation
      */
     protected function resolveMigrator($table)
     {
-        $app      = $this->app;
-        $resolver = $this->resolver;
+        $app = $this->app;
 
         if (! isset($this->migrator[$table])) {
-            $respositoryClass = $resolver['repository'];
-            $migratorClass    = $resolver['migrator'];
+            $respositoryClass = Arr::get($this->resolver, 'repository');
+            $migratorClass    = Arr::get($this->resolver, 'migrator');
 
             $repository = new $respositoryClass($app['db'], $table);
             $migrator   = new $migratorClass($repository, $app['db'], $app['files']);
@@ -204,6 +210,7 @@ trait Operation
                 'entity'     => $entity,
                 'template'   => $tenants['template'],
                 'connection' => $connection,
+                'migrator'   => $this,
             ]);
 
             $repository->set($name, $config);
@@ -248,10 +255,16 @@ trait Operation
     /**
      * Get migration path.
      *
-     * @return mixed
+     * @param  \Illuminate\Database\Eloquent\Model|null  $entity
+     *
+     * @return string|array|null
      */
-    public function getMigrationPath()
+    public function getMigrationPath(Model $entity = null)
     {
+        if ($entity !== null && isset($this->migrationPaths[$entity->getKey()])) {
+            return array_merge([$this->getConfig('path')], $this->migrationPaths[$entity->getKey()]);
+        }
+
         return $this->getConfig('path');
     }
 
@@ -300,5 +313,25 @@ trait Operation
         }
 
         return Str::replace($name, $this->data[$id]);
+    }
+
+    /**
+     * Load migrations from a specific path.
+     *
+     * @param  string|array  $paths
+     * @param  \Illuminate\Database\Eloquent\Model  $entity
+     *
+     * @return null
+     */
+    public function loadMigrationsFrom($paths, Model $entity)
+    {
+        $id = $entity->getKey();
+
+        if (! isset($this->migrationPaths[$id])) {
+            $this->migrationPaths[$id] = [];
+        }
+
+        $this->migrationPaths[$id] = array_merge($this->migrationPaths[$id], (array) $paths);
+        $this->migrationPaths[$id] = array_unique($this->migrationPaths[$id]);
     }
 }
